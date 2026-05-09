@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#1e293b">
+<title>QR Scanner – StockFG Pro</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0f172a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  #header{width:100%;padding:14px 16px;background:#1e293b;display:flex;align-items:center;
+           gap:10px;font-size:16px;font-weight:600}
+  #header svg{width:22px;height:22px;fill:#6366f1}
+  #reader{width:100%;max-width:480px}
+  /* override html5-qrcode default styles */
+  #reader video{border-radius:0!important}
+  #reader__scan_region{border:none!important}
+  #status{width:100%;max-width:480px;padding:12px 16px;font-size:14px;
+          min-height:48px;text-align:center;color:#94a3b8;line-height:1.4}
+  #status.ok{color:#4ade80;font-size:16px;font-weight:600}
+  #status.err{color:#f87171}
+  #result-box{display:none;width:100%;max-width:480px;padding:14px 16px;
+              background:#1e293b;border-top:1px solid #334155}
+  #result-val{font-size:20px;font-weight:700;word-break:break-all;color:#818cf8;margin-bottom:8px}
+  #result-hint{font-size:12px;color:#64748b}
+  #btn-retry{margin-top:16px;padding:12px 28px;background:#6366f1;color:#fff;border:none;
+             border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;width:calc(100% - 32px);
+             max-width:448px;display:none}
+  #btn-retry:active{opacity:.8}
+  #viewfinder-wrap{position:relative}
+  .corner{position:absolute;width:26px;height:26px;pointer-events:none}
+  .corner.tl{top:20px;left:20px;border-top:4px solid #6366f1;border-left:4px solid #6366f1;border-radius:4px 0 0 0}
+  .corner.tr{top:20px;right:20px;border-top:4px solid #6366f1;border-right:4px solid #6366f1;border-radius:0 4px 0 0}
+  .corner.bl{bottom:20px;left:20px;border-bottom:4px solid #6366f1;border-left:4px solid #6366f1;border-radius:0 0 0 4px}
+  .corner.br{bottom:20px;right:20px;border-bottom:4px solid #6366f1;border-right:4px solid #6366f1;border-radius:0 0 4px 0}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <svg viewBox="0 0 24 24"><path d="M3 11V3h8v8H3zm2-6v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h2v2h-2v-2zm-4 0h2v2h-2v-2zm4 4h2v2h-2v-2zm-4 4h2v2h-2v-2zm4 0h2v2h-2v-2zm-4-8h2v6h-2v-6z"/></svg>
+  QR Scanner – StockFG Pro
+</div>
+
+<div id="viewfinder-wrap" style="width:100%;max-width:480px;position:relative">
+  <div id="reader"></div>
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+</div>
+
+<div id="status">Memulai kamera...</div>
+<div id="result-box">
+  <div id="result-val"></div>
+  <div id="result-hint">Mengirim ke aplikasi...</div>
+</div>
+<button id="btn-retry" onclick="startScanner()">Scan Lagi</button>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+// ── Config ───────────────────────────────────────────────────
+// GAS_URL: URL web app GAS dengan doPost untuk log (opsional)
+// Jika scanner dibuka sebagai popup dari GAS, hasil dikirim via postMessage
+// Ganti dengan URL doPost GAS Anda
+const GAS_URL = (function() {
+  var m = location.search.match(/[?&]gas=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : 'PASTE_DOPOST_URL_HERE';
+})();
+
+// Origin GAS app (untuk postMessage security)
+const PARENT_ORIGIN = (function() {
+  var m = location.search.match(/[?&]origin=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : '*';
+})();
+
+var scanner = null;
+var _done   = false;
+
+function setStatus(msg, cls) {
+  var el = document.getElementById('status');
+  el.textContent = msg;
+  el.className   = cls || '';
+}
+
+function startScanner() {
+  _done = false;
+  document.getElementById('result-box').style.display = 'none';
+  document.getElementById('btn-retry').style.display  = 'none';
+  setStatus('Memulai kamera...', '');
+
+  if (scanner) {
+    scanner.clear().catch(function(){}).finally(function(){ _initScanner(); });
+  } else {
+    _initScanner();
+  }
+}
+
+function _initScanner() {
+  scanner = new Html5Qrcode('reader');
+  scanner.start(
+    { facingMode: 'environment' },
+    { fps: 12, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
+    onScanSuccess,
+    function() { /* ignore frequent decode errors */ }
+  ).then(function() {
+    setStatus('Arahkan kamera ke QR code / barcode', '');
+  }).catch(function(err) {
+    setStatus('Kamera tidak bisa diakses: ' + (err.message || err), 'err');
+    document.getElementById('btn-retry').style.display = 'block';
+  });
+}
+
+async function onScanSuccess(code) {
+  if (_done) return;
+  _done = true;
+
+  // vibrate on success
+  if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+
+  // Stop scanner
+  try { await scanner.stop(); } catch(e) {}
+
+  setStatus('✓ Kode ditemukan!', 'ok');
+
+  var rb  = document.getElementById('result-box');
+  var rv  = document.getElementById('result-val');
+  var rh  = document.getElementById('result-hint');
+  var brn = document.getElementById('btn-retry');
+
+  rv.textContent = code;
+  rb.style.display = 'block';
+
+  // ── Mode 1: Popup dari GAS app → kirim via postMessage ──
+  if (window.opener && !window.opener.closed) {
+    rh.textContent = 'Mengirim ke aplikasi...';
+    try {
+      window.opener.postMessage({ type: 'QR_RESULT', code: code }, PARENT_ORIGIN);
+      rh.textContent = '✓ Terkirim! Window ini akan menutup...';
+      setTimeout(function() { window.close(); }, 1000);
+    } catch(e) {
+      rh.textContent = 'Gagal kirim ke aplikasi. Salin kode di atas.';
+      brn.style.display = 'block';
+    }
+    return;
+  }
+
+  // ── Mode 2: Standalone → POST ke GAS doPost ──
+  if (GAS_URL && GAS_URL !== 'PASTE_DOPOST_URL_HERE') {
+    rh.textContent = 'Mengirim ke server...';
+    try {
+      var user = localStorage.getItem('qr_user') || 'operator';
+      await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ code: code, user: user, ts: new Date().toISOString() })
+      });
+      rh.textContent = '✓ Tersimpan ke Google Sheet!';
+    } catch(e) {
+      rh.textContent = '⚠ Gagal kirim ke server. Kode tetap tersimpan lokal.';
+    }
+  } else {
+    rh.textContent = 'Salin kode di atas.';
+  }
+  brn.style.display = 'block';
+}
+
+// ── Start on load ──
+window.addEventListener('load', startScanner);
+</script>
+</body>
+</html>
