@@ -64,18 +64,14 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 // ── Config ───────────────────────────────────────────────────
-// GAS_URL: URL web app GAS dengan doPost untuk log (opsional)
-// Jika scanner dibuka sebagai popup dari GAS, hasil dikirim via postMessage
-// Ganti dengan URL doPost GAS Anda
-const GAS_URL = (function() {
-  var m = location.search.match(/[?&]gas=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : 'https://script.google.com/macros/s/AKfycbwBICDJPVW0tcEfj6RCpg6PNxQHJ0bi8VYYS_tzRBfVLaeTJhH1s3ru4PVJPnE331rf/exec';
-})();
+// Firebase RTDB REST endpoint — no SDK needed, plain fetch()
+// Node: sfpro/qr_scan — GAS app listens here and fills the field
+const FB_URL = 'https://opration-gssi-default-rtdb.asia-southeast1.firebasedatabase.app/sfpro/qr_scan.json';
 
-// Origin GAS app (untuk postMessage security)
-const PARENT_ORIGIN = (function() {
-  var m = location.search.match(/[?&]origin=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : '*';
+// Target field ID dari URL param (dikirim saat openQR)
+const QR_TARGET = (function() {
+  var m = location.search.match(/[?&]tgt=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
 })();
 
 var scanner = null;
@@ -135,38 +131,31 @@ async function onScanSuccess(code) {
   rv.textContent = code;
   rb.style.display = 'block';
 
-  // ── Mode 1: Popup dari GAS app → kirim via postMessage ──
-  // Gunakan '*' sebagai origin karena GAS berjalan di sandbox googleusercontent.com
-  if (window.opener && !window.opener.closed) {
-    rh.textContent = 'Mengirim ke aplikasi...';
-    try {
-      window.opener.postMessage({ type: 'QR_RESULT', code: code }, '*');
-      rh.textContent = '✓ Terkirim! Window ini akan menutup...';
-      setTimeout(function() { window.close(); }, 800);
-    } catch(e) {
-      rh.textContent = 'Gagal kirim. Salin kode di atas lalu ketik manual.';
-      brn.style.display = 'block';
+  // ── Kirim ke GAS app via Firebase RTDB ──
+  // postMessage tidak reliable dari popup ke GAS iframe
+  // Firebase RTDB sebagai jembatan: scanner tulis → GAS app baca & isi field
+  rh.textContent = 'Mengirim ke aplikasi...';
+  try {
+    var payload = JSON.stringify({
+      code   : code,
+      target : QR_TARGET,
+      ts     : Date.now()
+    });
+    var res = await fetch(FB_URL, { method: 'PUT', body: payload });
+    if (res.ok) {
+      rh.textContent = '✓ Terkirim! Field akan terisi otomatis.';
+      setTimeout(function() { window.close(); }, 1200);
+    } else {
+      throw new Error('HTTP ' + res.status);
     }
-    return;
-  }
-
-  // ── Mode 2: Standalone → POST ke GAS doPost ──
-  if (GAS_URL && GAS_URL !== 'https://script.google.com/macros/s/AKfycbwBICDJPVW0tcEfj6RCpg6PNxQHJ0bi8VYYS_tzRBfVLaeTJhH1s3ru4PVJPnE331rf/exec') {
-    rh.textContent = 'Mengirim ke server...';
-    try {
-      var user = localStorage.getItem('qr_user') || 'operator';
-      await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({ code: code, user: user, ts: new Date().toISOString() })
-      });
-      rh.textContent = '✓ Tersimpan ke Google Sheet!';
-    } catch(e) {
-      rh.textContent = '⚠ Gagal kirim ke server. Kode tetap tersimpan lokal.';
+  } catch(e) {
+    // Fallback: postMessage (mungkin berhasil di beberapa browser)
+    if (window.opener && !window.opener.closed) {
+      try { window.opener.postMessage({ type: 'QR_RESULT', code: code, target: QR_TARGET }, '*'); } catch(x) {}
     }
-  } else {
-    rh.textContent = 'Salin kode di atas.';
+    rh.textContent = 'Salin kode di atas, lalu ketik manual jika perlu.';
+    brn.style.display = 'block';
   }
-  brn.style.display = 'block';
 }
 
 // ── Start on load ──
