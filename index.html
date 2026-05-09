@@ -69,7 +69,7 @@
 // Ganti dengan URL doPost GAS Anda
 const GAS_URL = (function() {
   var m = location.search.match(/[?&]gas=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : 'https://script.google.com/macros/s/AKfycbzRLyJUgPTbV5BGwti-AxeTBe_OU7I3GsKS7B9GgwPOkhfZbUh9KzlYsEKqRjgGRSXu/exec';
+  return m ? decodeURIComponent(m[1]) : 'https://script.google.com/macros/s/AKfycbwBICDJPVW0tcEfj6RCpg6PNxQHJ0bi8VYYS_tzRBfVLaeTJhH1s3ru4PVJPnE331rf/exec';
 })();
 
 // Origin GAS app (untuk postMessage security)
@@ -136,21 +136,22 @@ async function onScanSuccess(code) {
   rb.style.display = 'block';
 
   // ── Mode 1: Popup dari GAS app → kirim via postMessage ──
+  // Gunakan '*' sebagai origin karena GAS berjalan di sandbox googleusercontent.com
   if (window.opener && !window.opener.closed) {
     rh.textContent = 'Mengirim ke aplikasi...';
     try {
-      window.opener.postMessage({ type: 'QR_RESULT', code: code }, PARENT_ORIGIN);
+      window.opener.postMessage({ type: 'QR_RESULT', code: code }, '*');
       rh.textContent = '✓ Terkirim! Window ini akan menutup...';
-      setTimeout(function() { window.close(); }, 1000);
+      setTimeout(function() { window.close(); }, 800);
     } catch(e) {
-      rh.textContent = 'Gagal kirim ke aplikasi. Salin kode di atas.';
+      rh.textContent = 'Gagal kirim. Salin kode di atas lalu ketik manual.';
       brn.style.display = 'block';
     }
     return;
   }
 
   // ── Mode 2: Standalone → POST ke GAS doPost ──
-  if (GAS_URL && GAS_URL !== 'https://script.google.com/macros/s/AKfycbzRLyJUgPTbV5BGwti-AxeTBe_OU7I3GsKS7B9GgwPOkhfZbUh9KzlYsEKqRjgGRSXu/exec') {
+  if (GAS_URL && GAS_URL !== 'https://script.google.com/macros/s/AKfycbwBICDJPVW0tcEfj6RCpg6PNxQHJ0bi8VYYS_tzRBfVLaeTJhH1s3ru4PVJPnE331rf/exec') {
     rh.textContent = 'Mengirim ke server...';
     try {
       var user = localStorage.getItem('qr_user') || 'operator';
