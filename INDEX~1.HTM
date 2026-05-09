@@ -69,7 +69,7 @@
 // Ganti dengan URL doPost GAS Anda
 const GAS_URL = (function() {
   var m = location.search.match(/[?&]gas=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : 'PASTE_DOPOST_URL_HERE';
+  return m ? decodeURIComponent(m[1]) : 'https://script.google.com/macros/s/AKfycbzRLyJUgPTbV5BGwti-AxeTBe_OU7I3GsKS7B9GgwPOkhfZbUh9KzlYsEKqRjgGRSXu/exec';
 })();
 
 // Origin GAS app (untuk postMessage security)
@@ -150,7 +150,7 @@ async function onScanSuccess(code) {
   }
 
   // ── Mode 2: Standalone → POST ke GAS doPost ──
-  if (GAS_URL && GAS_URL !== 'PASTE_DOPOST_URL_HERE') {
+  if (GAS_URL && GAS_URL !== 'https://script.google.com/macros/s/AKfycbzRLyJUgPTbV5BGwti-AxeTBe_OU7I3GsKS7B9GgwPOkhfZbUh9KzlYsEKqRjgGRSXu/exec') {
     rh.textContent = 'Mengirim ke server...';
     try {
       var user = localStorage.getItem('qr_user') || 'operator';
